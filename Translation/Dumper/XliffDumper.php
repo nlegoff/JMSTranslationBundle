@@ -21,6 +21,7 @@ namespace JMS\TranslationBundle\Translation\Dumper;
 use JMS\TranslationBundle\Model\FileSource;
 use JMS\TranslationBundle\JMSTranslationBundle;
 use JMS\TranslationBundle\Model\MessageCatalogue;
+use JMS\TranslationBundle\Model\Message\XliffMessage;
 
 /**
  * XLIFF dumper.
@@ -94,7 +95,42 @@ class XliffDumper implements DumperInterface
             $body->appendChild($unit = $doc->createElement('trans-unit'));
             $unit->setAttribute('id', hash('sha1', $id));
             $unit->setAttribute('resname', $id);
+            if ($message instanceof XliffMessage && $message->isApproved()) {
+                $unit->setAttribute('approved', 'yes');
+            }
 
+            $unit->appendChild($source = $doc->createElement('source'));
+            if (preg_match('/[<>&]/', $message->getSourceString())) {
+                $source->appendChild($doc->createCDATASection($message->getSourceString()));
+            } else {
+                $source->appendChild($doc->createTextNode($message->getSourceString()));
+            }
+
+            $unit->appendChild($target = $doc->createElement('target'));
+            if (preg_match('/[<>&]/', $message->getLocaleString())) {
+                $target->appendChild($doc->createCDATASection($message->getLocaleString()));
+            } else {
+                $target->appendChild($doc->createTextNode($message->getLocaleString()));
+            }
+
+            if ($message instanceof XliffMessage) {
+                if ($message->hasState()) {
+                    $target->setAttribute('state', $message->getState());
+                }
+                
+                if ($message->hasNotes()) {
+                    foreach ($message->getNotes() as $note) {
+                        $noteNode = $unit->appendChild($doc->createElement('note', $note['text']));
+                        if (isset($note['from'])) {
+                        	$noteNode->setAttribute('from', $note['from']);
+                        }
+                    }
+                }
+            } elseif ($message->isNew()) {
+                $target->setAttribute('state', XliffMessage::STATE_NEW);
+            }
+
+            // As per the OASIS XLIFF 1.2 non-XLIFF elements must be at the end of the <trans-unit>
             if ($sources = $message->getSources()) {
                 foreach ($sources as $source) {
                     if ($source instanceof FileSource) {
